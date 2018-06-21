@@ -1,9 +1,7 @@
 package tech.lacambra.fabric.javachaincode;
 
-import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
-import org.hyperledger.fabric.protos.peer.ChaincodeShim;
-import org.hyperledger.fabric.protos.peer.ChaincodeSupportGrpc;
+import org.hyperledger.fabric.protos.peer.ChaincodeShim.ChaincodeMessage;
 
 import java.util.Deque;
 import java.util.LinkedList;
@@ -11,30 +9,31 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.logging.Logger;
 
-import io.grpc.stub.StreamObserver;
-import org.hyperledger.fabric.protos.peer.ChaincodeShim;
-import org.hyperledger.fabric.protos.peer.ChaincodeShim.ChaincodeMessage;
+public class ChatStream implements StreamObserver<ChaincodeMessage> {
 
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
+    private static final Logger logger = Logger.getLogger(ChatStream.class.getName());
 
-public class ChatStream implements StreamObserver<ChaincodeShim.ChaincodeMessage> {
     private static final Deque<QueueMessage> EMPTY_DEQUE;
     private final MsgQueueHandler msgQueueHandler;
+    private StreamObserver<ChaincodeMessage> sender;
 
     static {
         EMPTY_DEQUE = new LinkedList<>();
     }
 
     public ChatStream() {
-        msgQueueHandler = new MsgQueueHandler(this);
+        msgQueueHandler = new MsgQueueHandler();
+    }
+
+    public CompletableFuture<Response> sendMessage(ChaincodeMessage message) {
+        return msgQueueHandler.queueMsg(message);
     }
 
     @Override
-    public void onNext(ChaincodeShim.ChaincodeMessage message) {
+    public void onNext(ChaincodeMessage message) {
+        logger.info("[onNext] Received message=" + message);
         msgQueueHandler.handleMsgResponse(message);
     }
 
@@ -52,21 +51,20 @@ public class ChatStream implements StreamObserver<ChaincodeShim.ChaincodeMessage
 
     }
 
-    public class MsgQueueHandler {
+    public void setSender(StreamObserver<ChaincodeMessage> sender) {
+        this.sender = sender;
+    }
+
+    private class MsgQueueHandler {
 
 
         private Map<String, Deque<QueueMessage>> txQueues;
-        private StreamObserver<ChaincodeShim.ChaincodeMessage> streamObserver;
-        private StreamObserver<ChaincodeShim.ChaincodeMessage> responseObserver;
 
-
-        public MsgQueueHandler(StreamObserver<ChaincodeShim.ChaincodeMessage> streamObserver) {
-
-            this.streamObserver = streamObserver;
+        public MsgQueueHandler() {
             txQueues = new ConcurrentHashMap<>();
         }
 
-        public CompletableFuture<Response> queueMsg(ChaincodeShim.ChaincodeMessage message) {
+        public CompletableFuture<Response> queueMsg(ChaincodeMessage message) {
             QueueMessage queueMessage = new QueueMessage(message);
             String txContextId = queueMessage.getMsgTxContextId();
             txQueues.computeIfAbsent(txContextId, key -> new ConcurrentLinkedDeque<>()).addLast(queueMessage);
@@ -93,7 +91,8 @@ public class ChatStream implements StreamObserver<ChaincodeShim.ChaincodeMessage
         private void sendMessage(String txContextId) {
             QueueMessage message = getCurrentMessage(txContextId);
             if (message != null) {
-                streamObserver.onNext(message.getChaincodeMessage());
+                logger.info("[sendMessage] Sending message=" + message);
+                sender.onNext(message.getChaincodeMessage());
             }
         }
 
@@ -106,7 +105,7 @@ public class ChatStream implements StreamObserver<ChaincodeShim.ChaincodeMessage
          *
          * @param {any} response the received response
          */
-        public void handleMsgResponse(ChaincodeShim.ChaincodeMessage response) {
+        public void handleMsgResponse(ChaincodeMessage response) {
             String txId = response.getTxid();
             String channelId = response.getChannelId();
             String txContextId = channelId + txId;
@@ -129,7 +128,7 @@ public class ChatStream implements StreamObserver<ChaincodeShim.ChaincodeMessage
             sendMessage(txContextId);
         }
 
-        private Response parseResponse(PeerMessageHandler handler, ChaincodeShim.ChaincodeMessage response, String method) {
+        private Response parseResponse(PeerMessageHandler handler, ChaincodeMessage response, String method) {
             return null;
         }
     }

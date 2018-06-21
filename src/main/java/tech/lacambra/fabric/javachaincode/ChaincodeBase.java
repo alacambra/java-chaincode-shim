@@ -1,21 +1,29 @@
 package tech.lacambra.fabric.javachaincode;
 
+import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
+import io.grpc.stub.StreamObserver;
+import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.net.JksOptions;
 import io.vertx.grpc.VertxChannelBuilder;
+import io.vertx.grpc.VertxServer;
+import io.vertx.grpc.VertxServerBuilder;
 import org.hyperledger.fabric.protos.peer.Chaincode.ChaincodeID;
 import org.hyperledger.fabric.protos.peer.ChaincodeShim;
 import org.hyperledger.fabric.protos.peer.ChaincodeSupportGrpc;
 
+import java.util.logging.Logger;
+
 public abstract class ChaincodeBase implements Chaincode {
+
+    private static final Logger logger = Logger.getLogger(ChaincodeBase.class.getName());
 
     private final Vertx vertx;
     private boolean tlsEnabled;
-    private MsgQueueHandler msgQueueHandler;
 
-    public ChaincodeBase() {
-        vertx = Vertx.vertx();
+    public ChaincodeBase(Vertx vertx) {
+        this.vertx = vertx;
     }
 
     public ManagedChannel newPeerClientConnection() {
@@ -37,19 +45,33 @@ public abstract class ChaincodeBase implements Chaincode {
     }
 
     public void start(String... args) {
-        chatWithPeer(newPeerClientConnection());
+
+
+        ManagedChannel channel = newPeerClientConnection();
+
+        vertx.setPeriodic(100, tid -> {
+
+            ConnectivityState state = channel.getState(true);
+
+            logger.info("[start] Channel state is " + state);
+
+            if (state == ConnectivityState.READY) {
+                chatWithPeer(channel);
+                vertx.cancelTimer(tid);
+            }
+        });
     }
 
     public void chatWithPeer(ManagedChannel channel) {
-        ChatStream responseObserver = new ChatStream();
+        ChatStream chatStream = new ChatStream();
         ChaincodeSupportGrpc.ChaincodeSupportStub stub = ChaincodeSupportGrpc.newStub(channel);
-        io.grpc.stub.StreamObserver<ChaincodeShim.ChaincodeMessage> streamObserver = stub.register(responseObserver);
-        msgQueueHandler = new MsgQueueHandler(streamObserver);
+        StreamObserver<ChaincodeShim.ChaincodeMessage> streamObserver = stub.register(chatStream);
+        chatStream.setSender(streamObserver);
 
 
         // Send the ChaincodeID during register.
         ChaincodeID chaincodeID = ChaincodeID.newBuilder()
-                .setName("")
+                .setName("test")
                 .build();
 
         ChaincodeShim.ChaincodeMessage registrationMessage = ChaincodeShim.ChaincodeMessage.newBuilder()
@@ -57,21 +79,17 @@ public abstract class ChaincodeBase implements Chaincode {
                 .setType(ChaincodeShim.ChaincodeMessage.Type.REGISTER)
                 .build();
 
+        logger.info(String.format("Registering as '%s' ... sending %s", chaincodeID.getName(), ChaincodeShim.ChaincodeMessage.Type.REGISTER));
         // Register on the stream
-        msgQueueHandler.queueMsg(registrationMessage);
-
-        while (true) {
-            try {
-                responseObserver.receive();
-            } catch (Exception e) {
-                System.err.println(e);
-                break;
-            }
-        }
+//        chatStream.sendMessage(registrationMessage);
+//        System.out.println(channel.shutdown().getState(false));
+//        vertx.close(System.out::println);
     }
 
     public static void main(String[] args) {
-        new ChaincodeBase() {
+//
+        Vertx vertx = Vertx.vertx().exceptionHandler(System.out::println);
+        ChaincodeBase chaincodeBase = new ChaincodeBase(vertx) {
             @Override
             public Response init(ChaincodeStub stub) {
                 return null;
@@ -81,7 +99,8 @@ public abstract class ChaincodeBase implements Chaincode {
             public Response invoke(ChaincodeStub stub) {
                 return null;
             }
-        }.start("");
+        };
+        chaincodeBase.start("");
     }
 
 }

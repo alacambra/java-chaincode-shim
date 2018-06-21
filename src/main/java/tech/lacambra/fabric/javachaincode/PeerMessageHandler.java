@@ -10,18 +10,18 @@ import static org.hyperledger.fabric.protos.peer.ChaincodeShim.ChaincodeMessage.
 
 public class PeerMessageHandler {
 
-    private MsgQueueHandler msgQueueHandler;
+    private ChatStream chatStream;
 
     public CompletableFuture<Response> getState(String channelId, String txId, String key) {
-        return msgQueueHandler.queueMsg(newGetStateEventMessage("", channelId, txId, key));
+        return chatStream.sendMessage(newGetStateEventMessage("", channelId, txId, key));
     }
 
-    public PeerMessageHandler(MsgQueueHandler msgQueueHandler) {
-        this.msgQueueHandler = msgQueueHandler;
+    public PeerMessageHandler(ChatStream chatStream) {
+        this.chatStream = chatStream;
     }
 
     private CompletableFuture<Response> askPeerAndListen(ChaincodeShim.ChaincodeMessage message, String method) {
-        return this.msgQueueHandler.queueMsg(message);
+        return this.chatStream.sendMessage(message);
     }
 
     private static ChaincodeShim.ChaincodeMessage newGetStateEventMessage(String collection, String channelId, String txId, String key) {

@@ -26,4 +26,12 @@ public class QueueMessage {
     public String getMsgTxContextId() {
         return chaincodeMessage.getChannelId() + chaincodeMessage.getTxid();
     }
+
+    @Override
+    public String toString() {
+        return "QueueMessage{" +
+                "chaincodeMessage=" + chaincodeMessage +
+                ", onResponse=" + onResponse +
+                '}';
+    }
 }
