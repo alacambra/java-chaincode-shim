@@ -1,25 +1,25 @@
 package tech.lacambra.fabric.javachaincode;
 
-import org.hyperledger.fabric.protos.peer.ChaincodeShim;
+import org.hyperledger.fabric.protos.peer.ChaincodeShim.ChaincodeMessage;
 
 import java.util.concurrent.CompletableFuture;
 
 public class QueueMessage {
 
-    private final ChaincodeShim.ChaincodeMessage chaincodeMessage;
-    private final CompletableFuture<ChaincodeShim.ChaincodeMessage> onResponse;
+    private final ChaincodeMessage chaincodeMessage;
+    private final CompletableFuture<ChaincodeMessage> onResponse;
 
-    public QueueMessage(ChaincodeShim.ChaincodeMessage chaincodeMessage) {
+    public QueueMessage(ChaincodeMessage chaincodeMessage) {
         this.chaincodeMessage = chaincodeMessage;
         this.onResponse = new CompletableFuture<>();
     }
 
-    public ChaincodeShim.ChaincodeMessage getChaincodeMessage() {
+    public ChaincodeMessage getChaincodeMessage() {
         return chaincodeMessage;
     }
 
 
-    public CompletableFuture<ChaincodeShim.ChaincodeMessage> getOnResponse() {
+    public CompletableFuture<ChaincodeMessage> getOnResponse() {
         return onResponse;
     }
 

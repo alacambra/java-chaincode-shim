@@ -1,7 +1,9 @@
 package tech.lacambra.fabric.javachaincode;
 
+import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
 import org.hyperledger.fabric.protos.peer.ChaincodeShim.ChaincodeMessage;
+import org.hyperledger.fabric.protos.peer.ChaincodeSupportGrpc;
 
 import java.util.Deque;
 import java.util.LinkedList;
@@ -23,7 +25,9 @@ public class ChatStream implements StreamObserver<ChaincodeMessage> {
         EMPTY_DEQUE = new LinkedList<>();
     }
 
-    public ChatStream() {
+    public ChatStream(ManagedChannel channel) {
+        ChaincodeSupportGrpc.ChaincodeSupportStub stub = ChaincodeSupportGrpc.newStub(channel);
+        sender = stub.register(this);
         msgQueueHandler = new MsgQueueHandler();
     }
 
@@ -39,20 +43,19 @@ public class ChatStream implements StreamObserver<ChaincodeMessage> {
 
     @Override
     public void onError(Throwable t) {
+        logger.severe("[onError] error" + t.getCause().getMessage());
+
 
     }
 
     @Override
     public void onCompleted() {
+        logger.info("[onCompleted] Done!");
 
     }
 
     public void receive() {
 
-    }
-
-    public void setSender(StreamObserver<ChaincodeMessage> sender) {
-        this.sender = sender;
     }
 
     private class MsgQueueHandler {
@@ -91,7 +94,7 @@ public class ChatStream implements StreamObserver<ChaincodeMessage> {
         private void sendMessage(String txContextId) {
             QueueMessage message = getCurrentMessage(txContextId);
             if (message != null) {
-                logger.info("[sendMessage] Sending message=" + message);
+                logger.info("[sendMessage] Sending message=" + message.getChaincodeMessage());
                 sender.onNext(message.getChaincodeMessage());
             }
         }
