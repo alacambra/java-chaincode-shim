@@ -1,5 +1,6 @@
 package tech.lacambra.fabric.javachaincode;
 
+import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
 import org.hyperledger.fabric.protos.peer.ChaincodeShim.ChaincodeMessage;
@@ -20,18 +21,21 @@ public class ChatStream implements StreamObserver<ChaincodeMessage> {
     private static final Deque<QueueMessage> EMPTY_DEQUE;
     private final MsgQueueHandler msgQueueHandler;
     private StreamObserver<ChaincodeMessage> sender;
+    private ManagedChannel channel;
+
 
     static {
         EMPTY_DEQUE = new LinkedList<>();
     }
 
     public ChatStream(ManagedChannel channel) {
+        this.channel = channel;
         ChaincodeSupportGrpc.ChaincodeSupportStub stub = ChaincodeSupportGrpc.newStub(channel);
         sender = stub.register(this);
         msgQueueHandler = new MsgQueueHandler();
     }
 
-    public CompletableFuture<Response> sendMessage(ChaincodeMessage message) {
+    public CompletableFuture<ByteString> sendMessage(ChaincodeMessage message) {
         return msgQueueHandler.queueMsg(message);
     }
 
@@ -43,18 +47,15 @@ public class ChatStream implements StreamObserver<ChaincodeMessage> {
 
     @Override
     public void onError(Throwable t) {
-        logger.severe("[onError] error" + t.getCause().getMessage());
+        throw new RuntimeException(t);
 
 
     }
 
     @Override
     public void onCompleted() {
+        channel.shutdown();
         logger.info("[onCompleted] Done!");
-
-    }
-
-    public void receive() {
 
     }
 
@@ -67,12 +68,12 @@ public class ChatStream implements StreamObserver<ChaincodeMessage> {
             txQueues = new ConcurrentHashMap<>();
         }
 
-        public CompletableFuture<Response> queueMsg(ChaincodeMessage message) {
+        public CompletableFuture<ByteString> queueMsg(ChaincodeMessage message) {
             QueueMessage queueMessage = new QueueMessage(message);
             String txContextId = queueMessage.getMsgTxContextId();
             txQueues.computeIfAbsent(txContextId, key -> new ConcurrentLinkedDeque<>()).addLast(queueMessage);
 
-            CompletableFuture<Response> future = queueMessage.getOnResponse().thenApply(m -> new Response());
+            CompletableFuture<ByteString> future = queueMessage.getOnResponse().thenApply(ChaincodeMessage::getPayload);
 
             if (txQueues.get(txContextId).size() == 1) {
                 sendMessage(txContextId);
